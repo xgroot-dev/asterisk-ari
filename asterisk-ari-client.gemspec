@@ -29,7 +29,8 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "activesupport", "~> 7.0"
 
   spec.add_dependency "multi_json"
-  # connect_websocket attaches its listeners in the block of WebSocket::Client::Simple.connect, added in 0.3.0
-  spec.add_dependency "websocket-client-simple", "~> 0.3"
+  # connect_websocket attaches its listeners in the block of WebSocket::Client::Simple.connect (added in 0.3.0)
+  # and ends the reader thread of a websocket it gives up through Client#thread (added in 0.7.0)
+  spec.add_dependency "websocket-client-simple", "~> 0.7"
   spec.add_dependency "event_emitter", "~> 0.2"
 end

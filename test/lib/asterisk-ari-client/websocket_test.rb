@@ -144,6 +144,45 @@ class TestWebsocket < Minitest::Test
     @server = TCPServer.new('127.0.0.1', 0)
   end
 
+  def test_reconnect_goes_on_when_the_close_of_the_previous_websocket_raises
+    opened = Queue.new
+    @client.on(:websocket_open) { opened << true }
+    server = Thread.new { accept_websocket }
+    @client.connect_websocket
+    server.value
+    assert wait_for(opened)
+    previous = @client.ws
+    # The write of the close frame finds the connection reset.
+    previous.define_singleton_method(:send) { |*| raise Errno::ECONNRESET }
+
+    server = Thread.new { accept_websocket }
+    @client.connect_websocket
+    server.value
+
+    assert wait_for(opened)
+    refute_same previous, @client.ws
+    assert @client.ws.open?
+    previous.thread.join(5)
+    refute previous.thread.alive?
+  end
+
+  def test_unexpected_error_of_a_close_still_ends_the_reader_thread
+    opened = Queue.new
+    @client.on(:websocket_open) { opened << true }
+    server = Thread.new { accept_websocket }
+    @client.connect_websocket
+    server.value
+    assert wait_for(opened)
+    previous = @client.ws
+    previous.define_singleton_method(:close) { raise ArgumentError, 'unexpected' }
+
+    assert_raises(ArgumentError) { @client.connect_websocket }
+
+    assert_nil @client.ws
+    previous.thread.join(5)
+    refute previous.thread.alive?
+  end
+
   def test_close_that_hangs_is_ended_with_the_reader_thread
     opened = Queue.new
     release = Queue.new

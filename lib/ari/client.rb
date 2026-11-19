@@ -83,12 +83,21 @@ module Ari
       return unless ws
       %w{ open message error close }.each { |e| ws.remove_listener(e) }
       # A dead peer can block the close frame or the TLS shutdown. The caller has to get on with its next
-      # connect, so the close gets a thread of its own and a time limit; past it, that thread and the
-      # websocket's reader are ended.
-      closing = Thread.new { ws.close }
-      return if closing.join(WEBSOCKET_CLOSE_TIMEOUT)
-      closing.kill
-      ws.thread&.kill
+      # connect, so the close gets a thread of its own and a time limit.
+      closing = Thread.new do
+        Thread.current.report_on_exception = false # the join below raises it in the caller
+        begin
+          ws.close
+        rescue SystemCallError, IOError, OpenSSL::SSL::SSLError
+          # The connection is gone already, there is nothing left to close politely.
+        end
+      end
+      closing.join(WEBSOCKET_CLOSE_TIMEOUT)
+    ensure
+      # websocket-client-simple ends its reader thread as the last step of a close. A close that hangs or
+      # raises does not get there, so both threads are ended here.
+      closing&.kill
+      ws&.thread&.kill
     end
 
     def handle_websocket_open
